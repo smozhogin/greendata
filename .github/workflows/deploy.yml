@@ -142,15 +142,17 @@ jobs:
               run: |
                   set -e
 
-                  if terraform state list | grep -q '^yandex_serverless_container\.greendata_api$'; then
-                      echo "Resource already in state. Skipping import."
-                      exit 0
+                  if terraform show -no-color >/dev/null 2>&1; then
+                      if terraform show -no-color | grep -q 'yandex_serverless_container\.greendata_api'; then
+                          echo "Resource already in state. Skipping import."
+                          exit 0
+                      fi
                   fi
 
                   CONTAINER_ID="$(yc serverless container get --name "${{ env.API_NAME }}" --format json | jq -r '.id')"
                   echo "Importing container id: $CONTAINER_ID"
 
-                  timeout 60 terraform import yandex_serverless_container.greendata_api "$CONTAINER_ID"
+                  timeout 60 terraform import -input=false                       -var="folder_id=${{ secrets.YC_FOLDER_ID }}"                       -var="service_account_id=${{ secrets.YC_SERVICE_ACCOUNT_ID }}"                       -var="api_image_url=${{ env.API_IMAGE_URL }}"                       yandex_serverless_container.greendata_api "$CONTAINER_ID"
 
             - name: Apply Terraform
               if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
