@@ -1,6 +1,22 @@
 FROM python:3.11-slim
+
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends     ca-certificates     libgomp1  && rm -rf /var/lib/apt/lists/*
+
+ENV HF_HOME=/opt/hf     TRANSFORMERS_CACHE=/opt/hf     HF_HUB_DISABLE_TELEMETRY=1     PYTHONUNBUFFERED=1
+
 COPY requirements.txt .
 RUN python -m pip install --no-cache-dir -r requirements.txt
+
+RUN python - <<'PY'
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+MODEL_ID = "kazars24/trocr-base-handwritten-ru"
+TrOCRProcessor.from_pretrained(MODEL_ID)
+VisionEncoderDecoderModel.from_pretrained(MODEL_ID)
+print("Model cached:", MODEL_ID)
+PY
+
 COPY . .
-CMD ["sh", "-c", "uvicorn models_info.inference:app --host 0.0.0.0 --port ${PORT}"]
+
+CMD ["sh", "-c", "uvicorn models_info.inference:app --host 0.0.0.0 --port ${PORT} --log-level info"]
