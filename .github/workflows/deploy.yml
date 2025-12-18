@@ -134,6 +134,19 @@ jobs:
               if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
               run: terraform init
 
+            - name: Import Existing Container in Terraform
+              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              run: |
+                  set +e
+                  CONTAINER_ID="$(yc serverless container get --name "${{ env.API_NAME }}" --format json | jq -r '.id')"
+                  terraform import yandex_serverless_container.greendata_api "$CONTAINER_ID"
+                  EXIT_CODE=$?
+                  set -e
+
+                  if [ "$EXIT_CODE" -ne 0 ]; then
+                      echo "Import skipped or already done (exit=$EXIT_CODE). Continuing..."
+                  fi
+
             - name: Apply Terraform
               if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
               run: |
