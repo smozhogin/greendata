@@ -1,0 +1,110 @@
+name: Conditional Deploy (API + UI) to Yandex Serverless Containers
+
+on:
+    push:
+        branches: [main]
+
+permissions:
+    contents: read
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+
+        env:
+            REGISTRY: cr.yandex/${{ secrets.YC_REGISTRY_ID }}
+            TAG: ${{ github.sha }}
+            API_NAME: greendata-api
+
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v4
+
+            - name: Detect Changes
+              uses: dorny/paths-filter@v3
+              id: changes
+              with:
+                  filters: |
+                      api:
+                          - "models_info/**"
+                          - "Dockerfile"
+                          - "requirements.txt"
+                      infra:
+                          - "*.tf"
+                          - ".github/workflows/**"
+
+            - name: Setup Yandex Cloud
+              uses: nightstory/setup-yc@v1
+
+            - name: Configure Yandex Cloud
+              run: |
+                  echo '${{ secrets.YC_SA_KEY_JSON }}' > sa-key.json
+                  yc config set service-account-key sa-key.json
+                  yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
+
+            - name: Detect Existing Container
+              run: |
+                  set +e
+                  yc serverless container get --name "${{ env.API_NAME }}" >/dev/null 2>&1
+                  API_EXISTS=$?
+                  set -e
+
+                  if [ "$API_EXISTS" -eq 0 ]; then
+                      echo "API_EXISTS=true" >> $GITHUB_ENV
+                  else
+                      echo "API_EXISTS=false" >> $GITHUB_ENV
+                  fi
+
+            - name: Decide to Build
+              run: |
+                  BUILD_API="${{ steps.changes.outputs.api }}"
+                  if [ "${{ env.API_EXISTS }}" = "false" ]; then
+                      BUILD_API="true"
+                  fi
+                  echo "BUILD_API=$BUILD_API" >> $GITHUB_ENV
+
+            - name: Login to Yandex Container Registry
+              if: env.BUILD_API == 'true'
+              uses: yc-actions/yc-cr-login@v2
+              with:
+                  yc-sa-json-credentials: ${{ secrets.YC_SA_KEY_JSON }}
+
+            - name: Set-up Docker Buildx
+              if: env.BUILD_API == 'true'
+              uses: docker/setup-buildx-action@v3
+
+            - name: Build & Push API
+              if: env.BUILD_API == 'true'
+              uses: docker/build-push-action@v6
+              with:
+                  context: .
+                  file: Dockerfile
+                  push: true
+                  tags: ${{ env.REGISTRY }}/${{ env.API_NAME }}:${{ env.TAG }}
+
+            - name: Resolve Image URL for Terraform
+              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              run: |
+                  sudo apt-get update -y
+                  sudo apt-get install -y jq
+
+                  if [ "${{ env.BUILD_API }}" = "true" ]; then
+                      API_IMAGE_URL="${{ env.REGISTRY }}/${{ env.API_NAME }}:${{ env.TAG }}"
+                  else
+                      API_IMAGE_URL="$(yc serverless container get --name "${{ env.API_NAME }}" --format json | jq -r '.image.url')"
+                  fi
+
+                  echo "API_IMAGE_URL=$API_IMAGE_URL" >> $GITHUB_ENV
+
+            - name: Setup Terraform
+              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              uses: hashicorp/setup-terraform@v3
+
+            - name: Init Terraform
+              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              run: terraform init
+
+            - name: Apply Terraform
+              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              run: |
+                  terraform apply -auto-approve                       -var="folder_id=${{ secrets.YC_FOLDER_ID }}"                       -var="service_account_id=${{ secrets.YC_SERVICE_ACCOUNT_ID }}"                       -var="api_image_url=${{ env.API_IMAGE_URL }}"
