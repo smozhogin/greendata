@@ -92,8 +92,17 @@ jobs:
                   if [ "${{ env.BUILD_API }}" = "true" ]; then
                       API_IMAGE_URL="${{ env.REGISTRY }}/${{ env.API_NAME }}:${{ env.TAG }}"
                   else
-                      API_IMAGE_URL="$(yc serverless container get --name "${{ env.API_NAME }}" --format json | jq -r '.image.url')"
+                      API_IMAGE_URL="$(
+                          yc serverless container revision list                           --container-name "${{ env.API_NAME }}"                           --format json                           | jq -r 'sort_by(.created_at) | last | .image.url'
+                      )"
                   fi
+
+                  if [ -z "$API_IMAGE_URL" ] || [ "$API_IMAGE_URL" = "null" ]; then
+                      echo "API_IMAGE_URL is empty (no revisions found)."
+                      exit 1
+                  fi
+
+                  echo "Using image: $API_IMAGE_URL"
 
                   echo "API_IMAGE_URL=$API_IMAGE_URL" >> $GITHUB_ENV
 
