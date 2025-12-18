@@ -39,7 +39,10 @@ jobs:
 
             - name: Configure Yandex Cloud
               run: |
-                  echo '${{ secrets.YC_SA_KEY_JSON }}' > sa-key.json
+                  cat > sa-key.json <<'JSON'
+                  ${{ secrets.YC_SA_KEY_JSON }}
+                  JSON
+                  python -m json.tool sa-key.json > /dev/null
                   yc config set service-account-key sa-key.json
                   yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
 
@@ -137,15 +140,17 @@ jobs:
             - name: Import Existing Container in Terraform
               if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
               run: |
-                  set +e
-                  CONTAINER_ID="$(yc serverless container get --name "${{ env.API_NAME }}" --format json | jq -r '.id')"
-                  terraform import yandex_serverless_container.greendata_api "$CONTAINER_ID"
-                  EXIT_CODE=$?
                   set -e
 
-                  if [ "$EXIT_CODE" -ne 0 ]; then
-                      echo "Import skipped or already done (exit=$EXIT_CODE). Continuing..."
+                  if terraform state list | grep -q '^yandex_serverless_container\.greendata_api$'; then
+                      echo "Resource already in state. Skipping import."
+                      exit 0
                   fi
+
+                  CONTAINER_ID="$(yc serverless container get --name "${{ env.API_NAME }}" --format json | jq -r '.id')"
+                  echo "Importing container id: $CONTAINER_ID"
+
+                  timeout 60 terraform import yandex_serverless_container.greendata_api "$CONTAINER_ID"
 
             - name: Apply Terraform
               if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
