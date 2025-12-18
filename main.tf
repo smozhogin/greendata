@@ -26,7 +26,7 @@ provider "yandex" {
 }
 
 resource "yandex_serverless_container" "greendata_api" {
-    name               = "greendata_api"
+    name               = "greendata-api"
     folder_id          = var.folder_id
     service_account_id = var.service_account_id
 
