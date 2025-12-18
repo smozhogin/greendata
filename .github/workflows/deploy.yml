@@ -64,6 +64,29 @@ jobs:
                   fi
                   echo "BUILD_API=$BUILD_API" >> $GITHUB_ENV
 
+            - name: Resolve Image URL for Terraform
+              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              run: |
+                  sudo apt-get update -y
+                  sudo apt-get install -y jq
+
+                  if [ "${{ env.BUILD_API }}" = "true" ]; then
+                      API_IMAGE_URL="${{ env.REGISTRY }}/${{ env.API_NAME }}:${{ env.TAG }}"
+                  else
+                      API_IMAGE_URL="$(
+                          yc serverless container revision list                             --container-name "${{ env.API_NAME }}"                             --format json                           | jq -r 'sort_by(.created_at) | last | .image.url'
+                      )"
+
+                      if [ -z "$API_IMAGE_URL" ] || [ "$API_IMAGE_URL" = "null" ]; then
+                          echo "No revisions found. Forcing BUILD_API=true and using new image tag."
+                          echo "BUILD_API=true" >> $GITHUB_ENV
+                          API_IMAGE_URL="${{ env.REGISTRY }}/${{ env.API_NAME }}:${{ env.TAG }}"
+                      fi
+                  fi
+
+                  echo "Using image: $API_IMAGE_URL"
+                  echo "API_IMAGE_URL=$API_IMAGE_URL" >> $GITHUB_ENV
+
             - name: Login to Yandex Container Registry
               if: env.BUILD_API == 'true'
               uses: yc-actions/yc-cr-login@v2
@@ -82,29 +105,6 @@ jobs:
                   file: Dockerfile
                   push: true
                   tags: ${{ env.REGISTRY }}/${{ env.API_NAME }}:${{ env.TAG }}
-
-            - name: Resolve Image URL for Terraform
-              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
-              run: |
-                  sudo apt-get update -y
-                  sudo apt-get install -y jq
-
-                  if [ "${{ env.BUILD_API }}" = "true" ]; then
-                      API_IMAGE_URL="${{ env.REGISTRY }}/${{ env.API_NAME }}:${{ env.TAG }}"
-                  else
-                      API_IMAGE_URL="$(
-                          yc serverless container revision list                           --container-name "${{ env.API_NAME }}"                           --format json                           | jq -r 'sort_by(.created_at) | last | .image.url'
-                      )"
-                  fi
-
-                  if [ -z "$API_IMAGE_URL" ] || [ "$API_IMAGE_URL" = "null" ]; then
-                      echo "API_IMAGE_URL is empty (no revisions found)."
-                      exit 1
-                  fi
-
-                  echo "Using image: $API_IMAGE_URL"
-
-                  echo "API_IMAGE_URL=$API_IMAGE_URL" >> $GITHUB_ENV
 
             - name: Export Yandex Cloud Key for Terraform Provider
               if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
