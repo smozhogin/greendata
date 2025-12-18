@@ -1,9 +1,10 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
-fastapi
-uvicorn[standard]
-torch
-torchvision
+fastapi==0.125.0
+uvicorn[standard]==0.38.0
+torch==2.9.1
+torchvision==0.24.1
 transformers==4.46.0
-accelerate
-sentencepiece
-pillow
+accelerate==1.12.0
+sentencepiece==0.2.1
+pillow==12.0.0
+python-multipart==0.0.21
