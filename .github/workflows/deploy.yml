@@ -96,9 +96,29 @@ jobs:
 
                   echo "API_IMAGE_URL=$API_IMAGE_URL" >> $GITHUB_ENV
 
+            - name: Export Yandex Cloud Key for Terraform Provider
+              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              run: echo "YC_SERVICE_ACCOUNT_KEY_FILE=$PWD/sa-key.json" >> $GITHUB_ENV
+
             - name: Setup Terraform
               if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
               uses: hashicorp/setup-terraform@v3
+
+            - name: Configure Terraform CLI
+              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              run: |
+                  mkdir -p ~/.terraform.d
+                  cat > ~/.terraform.d/terraform.rc <<'EOF'
+                  provider_installation {
+                    network_mirror {
+                      url = "https://terraform-mirror.yandexcloud.net/"
+                      include = ["registry.terraform.io/*/*"]
+                    }
+                    direct {
+                      exclude = ["registry.terraform.io/*/*"]
+                    }
+                  }
+                  EOF
 
             - name: Init Terraform
               if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'

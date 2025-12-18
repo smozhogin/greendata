@@ -10,8 +10,23 @@ variable "api_image_url" {
     type = string
 }
 
-resource "yandex_serverless_container" "greendata-api" {
-    name               = "greendata-api"
+terraform {
+    required_version = ">= 1.3.0"
+
+    required_providers {
+        yandex = {
+            source  = "yandex-cloud/yandex"
+            version = "~> 0.130"
+        }
+    }
+}
+
+provider "yandex" {
+    folder_id = var.folder_id
+}
+
+resource "yandex_serverless_container" "greendata_api" {
+    name               = "greendata_api"
     folder_id          = var.folder_id
     service_account_id = var.service_account_id
 
