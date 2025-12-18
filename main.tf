@@ -38,3 +38,7 @@ resource "yandex_serverless_container" "greendata_api" {
         url = var.api_image_url
     }
 }
+
+output "api_url" {
+    value = yandex_serverless_container.greendata_api.url
+}

@@ -129,3 +129,7 @@ jobs:
               if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
               run: |
                   terraform apply -auto-approve                       -var="folder_id=${{ secrets.YC_FOLDER_ID }}"                       -var="service_account_id=${{ secrets.YC_SERVICE_ACCOUNT_ID }}"                       -var="api_image_url=${{ env.API_IMAGE_URL }}"
+
+            - name: Show API URL
+              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              run: terraform output -raw api_url
