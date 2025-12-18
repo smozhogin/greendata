@@ -9,6 +9,7 @@ permissions:
 
 jobs:
     deploy:
+        name: Build & Deploy
         runs-on: ubuntu-latest
 
         env:
