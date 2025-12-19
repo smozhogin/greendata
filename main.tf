@@ -34,6 +34,10 @@ resource "yandex_serverless_container" "greendata_api" {
     memory      = 4096
     concurrency = 1
 
+    provision_policy {
+        min_instances = 1
+    }
+
     image {
         url = var.api_image_url
     }
