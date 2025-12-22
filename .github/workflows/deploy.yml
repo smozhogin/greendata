@@ -210,7 +210,7 @@ jobs:
                   API_ID="$(echo "$API_JSON" | jq -r '.id')"
                   echo "Importing API container id: $API_ID"
 
-                  timeout 60 terraform import -input=false                       -var="folder_id=${{ secrets.YC_FOLDER_ID }}"                       -var="service_account_id=${{ secrets.YC_SERVICE_ACCOUNT_ID }}"                       -var="api_image_url=${{ env.API_IMAGE_URL }}"                       yandex_serverless_container.greendata_api "$API_ID"
+                  timeout 60 terraform import -input=false                       -var="folder_id=${{ secrets.YC_FOLDER_ID }}"                       -var="service_account_id=${{ secrets.YC_SERVICE_ACCOUNT_ID }}"                       -var="api_image_url=${{ env.API_IMAGE_URL }}"                       -var="ui_image_url=${{ env.UI_IMAGE_URL }}"                       yandex_serverless_container.greendata_api "$API_ID"
 
             - name: Import Existing UI Container in Terraform
               if: env.BUILD_UI == 'true' || steps.changes.outputs.infra == 'true'
