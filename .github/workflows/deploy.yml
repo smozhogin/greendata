@@ -16,6 +16,7 @@ jobs:
             REGISTRY: cr.yandex/${{ secrets.YC_REGISTRY_ID }}
             TAG: ${{ github.sha }}
             API_NAME: greendata-api
+            UI_NAME: greendata-ui
 
         steps:
             - name: Checkout Code
@@ -28,8 +29,12 @@ jobs:
                   filters: |
                       api:
                           - "models_info/**"
-                          - "Dockerfile"
-                          - "requirements.txt"
+                          - "Dockerfile.api"
+                          - "requirements-api.txt"
+                      ui:
+                          - "app.py"
+                          - "Dockerfile.ui"
+                          - "requirements-ui.txt"
                       infra:
                           - "*.tf"
                           - ".github/workflows/**"
@@ -46,7 +51,7 @@ jobs:
                   yc config set service-account-key sa-key.json
                   yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
 
-            - name: Detect Existing Container
+            - name: Detect Existing API Container
               run: |
                   set +e
                   yc serverless container get --name "${{ env.API_NAME }}" >/dev/null 2>&1
@@ -59,6 +64,19 @@ jobs:
                       echo "API_EXISTS=false" >> $GITHUB_ENV
                   fi
 
+            - name: Detect Existing UI Container
+              run: |
+                  set +e
+                  yc serverless container get --name "${{ env.UI_NAME }}" >/dev/null 2>&1
+                  UI_EXISTS=$?
+                  set -e
+
+                  if [ "$UI_EXISTS" -eq 0 ]; then
+                    echo "UI_EXISTS=true" >> $GITHUB_ENV
+                  else
+                    echo "UI_EXISTS=false" >> $GITHUB_ENV
+                  fi
+
             - name: Decide to Build
               run: |
                   BUILD_API="${{ steps.changes.outputs.api }}"
@@ -67,8 +85,14 @@ jobs:
                   fi
                   echo "BUILD_API=$BUILD_API" >> $GITHUB_ENV
 
-            - name: Resolve Image URL for Terraform
-              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+                  BUILD_UI="${{ steps.changes.outputs.ui }}"
+                  if [ "${{ env.UI_EXISTS }}" = "false" ]; then
+                      BUILD_UI="true"
+                  fi
+                  echo "BUILD_UI=$BUILD_UI" >> $GITHUB_ENV
+
+            - name: Resolve Image URLs for Terraform
+              if: env.BUILD_API == 'true' || env.BUILD_UI == 'true' || steps.changes.outputs.infra == 'true'
               run: |
                   sudo apt-get update -y
                   sudo apt-get install -y jq
@@ -77,27 +101,42 @@ jobs:
                       API_IMAGE_URL="${{ env.REGISTRY }}/${{ env.API_NAME }}:${{ env.TAG }}"
                   else
                       API_IMAGE_URL="$(
-                          yc serverless container revision list                             --container-name "${{ env.API_NAME }}"                             --format json                           | jq -r 'sort_by(.created_at) | last | .image.url'
+                          yc serverless container revision list                               --container-name "${{ env.API_NAME }}"                               --format json                           | jq -r 'sort_by(.created_at) | last | .image.url'
                       )"
-
                       if [ -z "$API_IMAGE_URL" ] || [ "$API_IMAGE_URL" = "null" ]; then
-                          echo "No revisions found. Forcing BUILD_API=true and using new image tag."
+                          echo "No API revisions found. Forcing BUILD_API=true."
                           echo "BUILD_API=true" >> $GITHUB_ENV
                           API_IMAGE_URL="${{ env.REGISTRY }}/${{ env.API_NAME }}:${{ env.TAG }}"
                       fi
                   fi
 
-                  echo "Using image: $API_IMAGE_URL"
+                  if [ "${{ env.BUILD_UI }}" = "true" ]; then
+                      UI_IMAGE_URL="${{ env.REGISTRY }}/${{ env.UI_NAME }}:${{ env.TAG }}"
+                  else
+                      UI_IMAGE_URL="$(
+                          yc serverless container revision list                               --container-name "${{ env.UI_NAME }}"                               --format json                           | jq -r 'sort_by(.created_at) | last | .image.url'
+                      )"
+                      if [ -z "$UI_IMAGE_URL" ] || [ "$UI_IMAGE_URL" = "null" ]; then
+                          echo "No UI revisions found. Forcing BUILD_UI=true."
+                          echo "BUILD_UI=true" >> $GITHUB_ENV
+                          UI_IMAGE_URL="${{ env.REGISTRY }}/${{ env.UI_NAME }}:${{ env.TAG }}"
+                      fi
+                  fi
+
+                  echo "Using API image: $API_IMAGE_URL"
+                  echo "Using UI image:  $UI_IMAGE_URL"
+
                   echo "API_IMAGE_URL=$API_IMAGE_URL" >> $GITHUB_ENV
+                  echo "UI_IMAGE_URL=$UI_IMAGE_URL" >> $GITHUB_ENV
 
             - name: Login to Yandex Container Registry
-              if: env.BUILD_API == 'true'
+              if: env.BUILD_API == 'true' || env.BUILD_UI == 'true'
               uses: yc-actions/yc-cr-login@v2
               with:
                   yc-sa-json-credentials: ${{ secrets.YC_SA_KEY_JSON }}
 
             - name: Set-up Docker Buildx
-              if: env.BUILD_API == 'true'
+              if: env.BUILD_API == 'true' || env.BUILD_UI == 'true'
               uses: docker/setup-buildx-action@v3
 
             - name: Build & Push API
@@ -105,20 +144,29 @@ jobs:
               uses: docker/build-push-action@v6
               with:
                   context: .
-                  file: Dockerfile
+                  file: Dockerfile.api
                   push: true
                   tags: ${{ env.REGISTRY }}/${{ env.API_NAME }}:${{ env.TAG }}
 
+            - name: Build & Push UI
+              if: env.BUILD_UI == 'true'
+              uses: docker/build-push-action@v6
+              with:
+                  context: .
+                  file: Dockerfile.ui
+                  push: true
+                  tags: ${{ env.REGISTRY }}/${{ env.UI_NAME }}:${{ env.TAG }}
+
             - name: Export Yandex Cloud Key for Terraform Provider
-              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              if: env.BUILD_API == 'true' || env.BUILD_UI == 'true' || steps.changes.outputs.infra == 'true'
               run: echo "YC_SERVICE_ACCOUNT_KEY_FILE=$PWD/sa-key.json" >> $GITHUB_ENV
 
             - name: Setup Terraform
-              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              if: env.BUILD_API == 'true' || env.BUILD_UI == 'true' || steps.changes.outputs.infra == 'true'
               uses: hashicorp/setup-terraform@v3
 
             - name: Configure Terraform CLI
-              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              if: env.BUILD_API == 'true' || env.BUILD_UI == 'true' || steps.changes.outputs.infra == 'true'
               run: |
                   mkdir -p ~/.terraform.d
                   cat > ~/.terraform.d/terraform.rc <<'EOF'
@@ -134,31 +182,72 @@ jobs:
                   EOF
 
             - name: Init Terraform
-              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              if: env.BUILD_API == 'true' || env.BUILD_UI == 'true' || steps.changes.outputs.infra == 'true'
               run: terraform init
 
-            - name: Import Existing Container in Terraform
+            - name: Import Existing API Container in Terraform
               if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
               run: |
                   set -e
 
                   if terraform show -no-color >/dev/null 2>&1; then
                       if terraform show -no-color | grep -q 'yandex_serverless_container\.greendata_api'; then
-                          echo "Resource already in state. Skipping import."
+                          echo "API resource already in state. Skipping import."
                           exit 0
                       fi
                   fi
 
-                  CONTAINER_ID="$(yc serverless container get --name "${{ env.API_NAME }}" --format json | jq -r '.id')"
-                  echo "Importing container id: $CONTAINER_ID"
+                  set +e
+                  API_JSON="$(yc serverless container get --name "${{ env.API_NAME }}" --format json 2>/dev/null)"
+                  RC=$?
+                  set -e
 
-                  timeout 60 terraform import -input=false                       -var="folder_id=${{ secrets.YC_FOLDER_ID }}"                       -var="service_account_id=${{ secrets.YC_SERVICE_ACCOUNT_ID }}"                       -var="api_image_url=${{ env.API_IMAGE_URL }}"                       yandex_serverless_container.greendata_api "$CONTAINER_ID"
+                  if [ "$RC" -ne 0 ] || [ -z "$API_JSON" ]; then
+                      echo "API container not found in YC. Skipping import (will be created by apply)."
+                      exit 0
+                  fi
+
+                  API_ID="$(echo "$API_JSON" | jq -r '.id')"
+                  echo "Importing API container id: $API_ID"
+
+                  timeout 60 terraform import -input=false                       -var="folder_id=${{ secrets.YC_FOLDER_ID }}"                       -var="service_account_id=${{ secrets.YC_SERVICE_ACCOUNT_ID }}"                       -var="api_image_url=${{ env.API_IMAGE_URL }}"                       yandex_serverless_container.greendata_api "$API_ID"
+
+            - name: Import Existing UI Container in Terraform
+              if: env.BUILD_UI == 'true' || steps.changes.outputs.infra == 'true'
+              run: |
+                  set -e
+
+                  if terraform show -no-color >/dev/null 2>&1; then
+                      if terraform show -no-color | grep -q 'yandex_serverless_container\.greendata_ui'; then
+                          echo "UI resource already in state. Skipping import."
+                          exit 0
+                      fi
+                  fi
+
+                  set +e
+                  UI_JSON="$(yc serverless container get --name "${{ env.UI_NAME }}" --format json 2>/dev/null)"
+                  RC=$?
+                  set -e
+
+                  if [ "$RC" -ne 0 ] || [ -z "$UI_JSON" ]; then
+                      echo "UI container not found in YC. Skipping import (will be created by apply)."
+                      exit 0
+                  fi
+
+                  UI_ID="$(echo "$UI_JSON" | jq -r '.id')"
+                  echo "Importing UI container id: $UI_ID"
+
+                  timeout 60 terraform import -input=false                       -var="folder_id=${{ secrets.YC_FOLDER_ID }}"                       -var="service_account_id=${{ secrets.YC_SERVICE_ACCOUNT_ID }}"                       -var="api_image_url=${{ env.API_IMAGE_URL }}"                       -var="ui_image_url=${{ env.UI_IMAGE_URL }}"                       yandex_serverless_container.greendata_ui "$UI_ID"
 
             - name: Apply Terraform
-              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              if: env.BUILD_API == 'true' || env.BUILD_UI == 'true' || steps.changes.outputs.infra == 'true'
               run: |
-                  terraform apply -auto-approve                       -var="folder_id=${{ secrets.YC_FOLDER_ID }}"                       -var="service_account_id=${{ secrets.YC_SERVICE_ACCOUNT_ID }}"                       -var="api_image_url=${{ env.API_IMAGE_URL }}"
+                  terraform apply -auto-approve                       -var="folder_id=${{ secrets.YC_FOLDER_ID }}"                       -var="service_account_id=${{ secrets.YC_SERVICE_ACCOUNT_ID }}"                       -var="api_image_url=${{ env.API_IMAGE_URL }}"                       -var="ui_image_url=${{ env.UI_IMAGE_URL }}"
 
             - name: Show API URL
-              if: env.BUILD_API == 'true' || steps.changes.outputs.infra == 'true'
+              if: env.BUILD_API == 'true' || env.BUILD_UI == 'true' || steps.changes.outputs.infra == 'true'
               run: terraform output -raw api_url
+
+            - name: Show UI URL
+              if: env.BUILD_API == 'true' || env.BUILD_UI == 'true' || steps.changes.outputs.infra == 'true'
+              run: terraform output -raw ui_url

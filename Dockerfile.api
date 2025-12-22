@@ -6,8 +6,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends     ca-certific
 
 ENV HF_HOME=/opt/hf     TRANSFORMERS_CACHE=/opt/hf     HF_HUB_DISABLE_TELEMETRY=1     PYTHONUNBUFFERED=1
 
-COPY requirements.txt .
-RUN python -m pip install --no-cache-dir -r requirements.txt
+COPY requirements-api.txt .
+RUN python -m pip install --no-cache-dir -r requirements-api.txt
 
 RUN python - <<'PY'
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
