@@ -66,12 +66,12 @@ jobs:
 
                       TAG="${{ github.sha }}"
 
-                      sudo docker build -f Dockerfile.ui                           -t greendata-ui:${TAG}                           .
+                      docker build -f Dockerfile.ui                           -t greendata-ui:${TAG}                           .
 
-                      sudo docker rm -f greendata-ui || true
-                      sudo docker run -d --name greendata-ui --restart unless-stopped                           -e PORT=8501                           -p 127.0.0.1:8501:8501                           greendata-ui:${TAG}
+                      docker rm -f greendata-ui || true
+                      docker run -d --name greendata-ui --restart unless-stopped                           -e PORT=8501                           -p 127.0.0.1:8501:8501                           greendata-ui:${TAG}
 
-                      sudo docker image prune -f || true
+                      docker image prune -f || true
 
             - name: Setup Yandex Cloud
               if: steps.changes.outputs.api == 'true' || steps.changes.outputs.infra == 'true'
