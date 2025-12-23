@@ -2,6 +2,10 @@
 
 **Команда:** 9-ый перцептрон
 
+### Используемый датасет
+
+https://drive.google.com/file/d/1wBgRhJc93BJGG5m6eFLu-901__iJQwWG/view (это сконвертированный в tsv датасет https://huggingface.co/datasets/ai-forever/school_notebooks_RU)
+
 ### Ссылки для тестирования модели
 
 - UI (Streamlit): https://ru.inter-students.com/greendata
