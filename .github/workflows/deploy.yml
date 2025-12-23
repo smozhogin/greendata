@@ -38,7 +38,21 @@ jobs:
                           - "*.tf"
                           - ".github/workflows/**"
 
-            - name: Deploy UI to VM via SSH
+            - name: Upload UI files to VM
+              if: steps.changes.outputs.ui == 'true'
+              run: |
+                  sudo apt-get update -y
+                  sudo apt-get install -y rsync
+
+                  mkdir -p ~/.ssh
+                  echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/id_ed25519
+                  chmod 600 ~/.ssh/id_ed25519
+
+                  ssh-keyscan -p ${{ secrets.VM_SSH_PORT }} -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
+
+                  rsync -az --delete                       --exclude ".git/"                       --exclude ".github/"                       -e "ssh -p ${{ secrets.VM_SSH_PORT }} -i ~/.ssh/id_ed25519"                       ./                       ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:~/Projects/Greendata/
+
+            - name: Build & Restart UI Container on VM
               if: steps.changes.outputs.ui == 'true'
               uses: appleboy/ssh-action@v1.2.0
               with:
@@ -48,10 +62,7 @@ jobs:
                   port: ${{ secrets.VM_SSH_PORT }}
                   script: |
                       set -euo pipefail
-                      cd ~/Projects/Greendata
-
-                      git fetch --all
-                      git reset --hard origin/main
+                      cd ~/Projects/Greendata/
 
                       TAG="${{ github.sha }}"
 
