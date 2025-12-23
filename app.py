@@ -136,13 +136,6 @@ with col_right:
                            
                             col_btn1, col_btn2, col_btn3 = st.columns(3)
                             with col_btn1:
-                                if st.button("📋 Скопировать", use_container_width=True):
-                                    try:
-                                        pyperclip.copy(text_result)
-                                        st.toast("Текст скопирован в буфер обмена!", icon="✅")
-                                    except:
-                                        st.error("Не удалось скопировать в буфер обмена")
-                            with col_btn2:
                                 st.download_button(
                                     label="💾 Скачать TXT",
                                     data=text_result,
