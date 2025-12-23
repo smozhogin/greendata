@@ -38,7 +38,7 @@ jobs:
                           - "*.tf"
                           - ".github/workflows/**"
 
-            - name: Upload UI files to VM
+            - name: Upload UI Files to VM
               if: steps.changes.outputs.ui == 'true'
               run: |
                   sudo apt-get update -y
