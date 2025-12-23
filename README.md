@@ -2,11 +2,13 @@
 
 **Команда:** 9-ый перцептрон
 
-**Ссылка для тестирования модели:** https://bbar5687vel2bbtv62ae.containers.yandexcloud.net/docs
+**Ссылки для тестирования модели:**
+- UI (Streamlit): https://ru.inter-students.com/greendata
+- API (Swagger): https://bbar5687vel2bbtv62ae.containers.yandexcloud.net/docs
 
 ### Предобработка
 
-- **Источник:** `ai-forever/school_notebooks_RU` (bbox в формате COCO). Конвертировано в `annotations.tsv` со столбцами:  
+- **Источник:** `ai-forever/school_notebooks_RU` (bbox в формате COCO). Конвертировано в `annotations.tsv` со столбцами:
   `split, image_rel, x1, y1, x2, y2, word_idx, text`, где `(x1, y1)` — левый верхний угол bbox, `(x2, y2)` — правый нижний.
 - **Фильтрация страниц:** удалены **309 страниц**, где `word_idx` внутри страницы не являлся строгой последовательностью `0..N-1` (встречались пропуски/дубли). Изображения физически не удалялись, фильтр применён только к аннотациям.
 - **Нормализация текста:** добавлен `text_clean` (нижний регистр, удалена пунктуация, нормализованы пробелы). Оригинальный текст сохранён в `text_raw`.
