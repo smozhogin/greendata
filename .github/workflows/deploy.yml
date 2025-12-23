@@ -134,6 +134,37 @@ jobs:
               if: steps.changes.outputs.api == 'true' || steps.changes.outputs.infra == 'true'
               run: terraform init
 
+            - name: Install jq
+              if: steps.changes.outputs.api == 'true' || steps.changes.outputs.infra == 'true'
+              run: |
+                  sudo apt-get update -y
+                  sudo apt-get install -y jq
+
+            - name: Import Existing API Container (Terraform)
+              if: steps.changes.outputs.api == 'true' || steps.changes.outputs.infra == 'true'
+              run: |
+                  set -euo pipefail
+
+                  if terraform state list | grep -q '^yandex_serverless_container\.greendata_api$'; then
+                      echo "Already in terraform state. Skip import."
+                      exit 0
+                  fi
+
+                  set +e
+                  API_JSON="$(yc serverless container get --name "${{ env.API_NAME }}" --format json 2>/dev/null)"
+                  RC=$?
+                  set -e
+
+                  if [ "$RC" -ne 0 ] || [ -z "$API_JSON" ]; then
+                      echo "API container not found in YC. Skipping import (will be created by apply)."
+                      exit 0
+                  fi
+
+                  API_ID="$(echo "$API_JSON" | jq -r '.id')"
+                  echo "Importing container id: $API_ID"
+
+                  terraform import -input=false                       -var="folder_id=${{ secrets.YC_FOLDER_ID }}"                       -var="service_account_id=${{ secrets.YC_SERVICE_ACCOUNT_ID }}"                       -var="api_image_url=${{ env.REGISTRY }}/${{ env.API_NAME }}:${{ env.TAG }}"                       yandex_serverless_container.greendata_api "$API_ID"
+
             - name: Apply Terraform
               if: steps.changes.outputs.api == 'true' || steps.changes.outputs.infra == 'true'
               run: |
